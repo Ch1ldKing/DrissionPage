@@ -488,13 +488,54 @@ def run_browser(chromium_options):
 
 
 def _new_tab_by_js(browser: Chromium, url, tab_type, new_window):
+    """
+    通过JavaScript的window.open()方法创建新标签页
+
+    Parameters:
+    -----------
+    browser : Chromium
+        浏览器对象
+    url : str
+        新标签页要打开的URL，如为空则使用about:blank
+    tab_type : ChromiumTab或MixTab
+        标签页类型
+    new_window : bool
+        是否在新窗口中打开
+
+    Returns:
+    --------
+    ChromiumTab或MixTab
+        新创建的标签页对象
+    """
     mix = tab_type == MixTab
     tab = browser._get_tab(mix=mix)
-    if url and not match(r'^.*?://.*', url):
-        raise IncorrectURLError(_S._lang.INVALID_URL, url=url)
-    url = f'"{url}"' if url else '""'
-    new = 'target="_new"' if new_window else 'target="_blank"'
-    tid = browser._newest_tab_id
-    tab.run_js(f'window.open({url}, {new})')
-    tid = browser.wait.new_tab(curr_tab=tid)
-    return browser._get_tab(tid, mix=mix)
+
+    # 当URL为空时使用空字符串，确保JavaScript语法正确
+    if url:
+        # 检查URL格式是否正确
+        if not match(r"^.*?://.*", url):
+            # 保持原有的错误处理逻辑
+            from ..errors import IncorrectURLError
+            from .._functions.settings import Settings as _S
+
+            raise IncorrectURLError(_S._lang.INVALID_URL, url=url)
+        # 为JavaScript字符串添加引号
+        js_url = f'"{url}"'
+    else:
+        # 为空URL使用空字符串，保证JavaScript语法正确
+        js_url = '"about:blank"'
+
+    # 设置window.open的target参数
+    target_param = 'target="_new"' if new_window else 'target="_blank"'
+
+    # 记录当前标签页ID用于后续等待新标签页
+    current_tab_id = browser._newest_tab_id
+
+    # 执行JavaScript创建新标签页
+    tab.run_js(f"window.open({js_url}, {target_param})")
+
+    # 等待新标签页创建并获取其ID
+    new_tab_id = browser.wait.new_tab(curr_tab=current_tab_id)
+
+    # 返回新标签页对象
+    return browser._get_tab(new_tab_id, mix=mix)
